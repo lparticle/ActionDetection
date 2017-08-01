@@ -1,0 +1,103 @@
+function do_form_codebook(config_file)
+
+%% Function takes the regions from all training images in the interest_points directory, along with
+%% their descirptors and performs k-means or hierarchical k-means on the descriptors to form a codebook
+%% for use in the do_vq function. The codebook is a
+%% nDescriptor_Dimensions by VQ.Codebook_Size matrix holding the centers
+%% of each cluster. This is then saved in the CODEBOOK_DIR directory,
+%% using a filename consisting of the VQ.Codebook_Type tag and the number
+%% of clusters, VQ.Codebook_Size.
+
+%% By Xiangang Cheng, NTU, SG
+%% xiangang@pmail.ntu.edu.sg
+%% 29/MAR/2010
+
+%% Evaluate global configuration file
+EXPTYPE = 'codebook';
+eval(config_file);
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+%% If no VQ structure specifying codebook
+%% give some defaults
+
+if ~exist('VQ')
+    %% use default codebook family
+    VQ.Codebook_Type = 'generic';
+    %% 1000 words is standard setting
+    VQ.Codebook_Size = 1000;
+    %% Max number of k-means iterations
+    VQ.Max_Iterations = 100;
+    %% Verbsoity of Mark's code
+    VQ.Verbosity = 0;
+end
+
+clc;
+
+codebook_name = VQ.Codebook_Type;
+
+% %% How many images are we processing?
+ NUM = length(VQ.fnames);
+
+%% create variable to hold all descriptors
+all_descriptors = [];
+% 
+%% Load up all interest points from all images....
+for i = 1 : NUM
+
+    if(~mod(i,10))
+        fprintf('.%d',i);
+    end;
+    if(~mod(i,100))
+        fprintf('\n');
+    end;
+    
+    %% load up all interest points
+    if(exist([VQ.Interest_Dir,VQ.fnames{i},'.desc']))
+        %         descriptor = load([VQ.Interest_Dir,VQ.fnames{i}]);    
+        try
+            tmpdescp = dlmread([VQ.Interest_Dir,VQ.fnames{i}, '.desc'], '', 3, 7);
+%             tmpdescp(:, end)= [];
+            tmpdescp = tmpdescp(:,1:VQ.featLenth)';
+            %%
+            desLength = size(tmpdescp, 2);
+            maxDescrip = floor(VQ.Max_Feature_Size/NUM);
+            if( desLength > maxDescrip)
+                idx = randperm(floor(desLength));
+                tmpdescp  = tmpdescp(:,idx(1:maxDescrip));
+            end
+            %% Add descriptors to collection
+            all_descriptors = [all_descriptors, tmpdescp];
+        catch           
+            fprintf('Wrong Image: %s\n', VQ.fnames{i});
+        end;
+    end;
+end
+Idxx = find(all_descriptors(1,:)<0);
+all_descriptors(:,Idxx)=[];
+save('cluster.mat','all_descriptors');
+% load('cluster.mat','all_descriptors');
+% load -mat cluster.data
+if(strcmpi(VQ.Codebook_Type, 'generic'))
+    %% form options structure for clustering   
+    codebook_size = VQ.Codebook_Size;
+    cluster_options.maxiters = VQ.Max_Iterations;
+    cluster_options.verbose  = VQ.Verbosity;
+
+    %% OK, now call kmeans clustering routine by Mark Everingham
+    [centers,sse] = vgg_kmeans(double(all_descriptors), codebook_size, cluster_options);
+    
+elseif(strcmpi(VQ.Codebook_Type, 'hkmeans'))
+    [centers,asgn]=HKmeans(all_descriptors,VQ.K, VQ.depth) ;
+else
+    fprintf('No such codebook type!!\n');
+end;
+%% form name to save codebook under
+fname = [VQ.CODEBOOK_DIR , '/', VQ.Codebook_Name];
+
+%% save centers to file...
+K_M_centers = centers;
+save(fname,'K_M_centers');
+
+%%%delete the tmpData
+delete('cluster.mat');
