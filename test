@@ -1,0 +1,1492 @@
+(function(){
+    // event listener for filters
+    d3.select("#do-filter")
+        .on("click", function(){
+
+            // get the filter parameters
+            var bookingCountries = $("#bookingcountry").val();
+            var segments = $("#segment").val();
+            var ServiceSegment = $("#ServiceSegment").val();
+			var RelationshipManager = $("#RelationshipManager").val();
+			var CompanyName = $("#company_name").val();
+            // console.log(bookingCountries);
+            // console.log(segments);
+            // console.log(gicindustries);
+            // get the overall d3 plotting
+            updateOverallPlot({
+                // make sure the key are the columns in the generated company data
+                "bookingcountry": bookingCountries,
+                "segment": segments,
+                "ServiceSegment": ServiceSegment,
+				"RelationshipManager": RelationshipManager,
+				"name": CompanyName
+            });
+        });
+
+
+	var scoreColorScaler = d3.scale.sqrt()
+        .domain([0.1, 1])
+        .range(["#fff236", "#971724"])
+        .clamp(true);
+
+
+    // redraw overall graph plot
+    function updateOverallPlot(filters) {
+        d3.xhr("/overall/")
+            .header("Content-Type", "application/json")
+            .post(
+                JSON.stringify(filters),
+                function(err, rawData) {
+                    var data = JSON.parse(rawData.response);
+                    console.log("got response", data);
+                    // draw a less detailed graph
+                    var nodes = data.nodes;
+                    // nodes = nodes.sort(function(a,b) {return b.score-a.score;});
+                    var links = data.links;
+
+                    // setup search node box
+                    setupSearchNode(nodes, links);
+                    console.log("data ready:", nodes.length, links.length)
+                    // redraw the company graph plot
+                     var width = 350,
+                        height = 350,
+						x=0,
+						y=0;
+                    d3.select("#company-plot").select("svg").remove();
+                    d3.selectAll(".d3-tip").remove();
+                    var svg = d3.select("#company-plot").append("svg")
+                        .attr("width", width)
+                        .attr("height", height)
+                        .attr("viewBox", "0 0 " + width + " " + height )
+                        .attr("preserveAspectRatio", "xMidYMin meet")
+						.attr("x", x)
+                        .attr("y", y);
+
+                    //tool tip
+                    var tip = d3.tip()
+                      .attr('class', 'd3-tip')
+                      .offset([-10, 0])
+                      .html(function(d) {
+                        return [
+                            "<strong>"+d.name+"</strong>",
+                            "<hr />",
+                            // "<strong>BookingCountry: "+d.bookingcountry+"</strong>",
+                            // "<strong>RiskTakingCountry: "+d.risktakingcountry+"</strong>",
+                            "<strong>Segment: "+d.segment+"</strong>",
+                            //"<strong>GIC Industry: "+d.gicindustry+"</strong>"
+                            //"<strong>ACRR: "+d.acrr+"</strong><br/>",
+                            //"<strong>Status: "+d.Status+"</strong><br>",
+                            //"<strong>Score: <span style='color:"+scoreColorScaler(d.score)+";'>"+d.score+"</span></strong><br>",
+                            //"<strong>Facility Limit: "+d.facility_limit+"</strong><br>",
+                            //"<strong>Outstanding Amount: "+d.outstanding_amount+"</strong>"
+							"<strong>GIC Industry: "+d.ServiceSegment+"</strong>"
+                        ].join("\n");
+                      });
+                    svg.call(tip);
+
+                    // static nodes, paths, texts
+                    var nnodes = nodes.length;
+                    var force = d3.layout.force()
+                        .nodes(nodes)
+                        .links(links)
+                        .size([width, height])
+                        .linkDistance(120)
+                        //.linkStrength(function (d, i){return d.weight;})
+                        // .charge(-15)
+                        .charge(-5 * 1000 / nnodes)
+                        .gravity(0.25)
+                        .on("tick", tick)
+                        .start();
+                    // Per-type markers, as they don't inherit styles.
+                    svg.append("defs").selectAll("marker")
+                        .data(["rem", "imex", "bs", "fpro"])
+                      .enter().append("marker")
+                        .attr("id", function(d) { return d; })
+                        .attr("viewBox", "0 -5 10 10")
+                        .attr("refX", 15)
+                        .attr("refY", -1.5)
+                        .attr("markerWidth", 6)
+                        .attr("markerHeight", 6)
+                        .attr("orient", "auto")
+                      .append("path")
+                        .attr("d", "M0,-5L10,0L0,5");
+
+                    var pathWeightScale = d3.scale.linear()
+                        .domain(d3.extent(links, function(d) {return d.weight;}))
+                        .range([1, 2]);
+                    var path = svg.append("g").selectAll("path")
+                        .data(force.links())
+                      .enter().append("path")
+                        // .attr("stroke-width", function(d) {return pathWeightScale(d.weight);})
+                        .attr("class", function(d) { return "link " + d.type; })
+                        // .attr("marker-end", function(d) { return "url(#" + d.type + ")"; })
+                        ;
+
+
+					var nodeRadiusScale = d3.scale.linear()
+                        .domain(d3.extent(nodes, function(d) {return d.influence;}))
+                        // .range([3, 8]);
+                        .range([5, 10]);
+                    var circle = svg.append("g").selectAll("circle")
+                        .data(force.nodes())
+                      .enter().append("circle")
+                        .attr("r", function(d) {return nodeRadiusScale(d.influence);})
+                        .attr("fill", function(d) {
+                            if (d.Status==="Customer") return "#ff6347";
+                            //if (d.Status==="Customer") return scoreColorScaler(0.5);
+                            else if (d.Status==="Prospect") return "#90EE90";
+                            else return "#ccc";
+                        })
+                        .on("click", function(d, i) {
+							tip.hide();
+                            d3.select("#company-gcin")
+                                .text(d.name + " (" + d.GCIN + ")");
+                            updateCompanyPlot(d.GCIN);
+                            updateSummary(d);
+                        })
+                        .on("mouseenter", tip.show)
+                        .on("mouseout", tip.hide)
+                        .call(force.drag);
+
+                    // dynamic behavior
+                    function tick() {
+                      path.attr("d", linkArc);
+                      circle.attr("transform", transform);
+                      // text.attr("transform", transform);
+                    }
+                    function linkArc(d) {
+                      var dx = d.target.x - d.source.x,
+                          dy = d.target.y - d.source.y,
+                          dr = Math.sqrt(dx * dx + dy * dy);
+                      return "M" + d.source.x + "," + d.source.y + "A" + dr + "," + dr + " 0 0,1 " + (d.target.x) + "," + (d.target.y);
+                    }
+                    function transform(d) {
+                        margin = 20;
+                        d.x = Math.max(margin, Math.min(width - margin, d.x));
+                        d.y = Math.max(margin, Math.min(height - margin, d.y));
+                        return "translate(" + d.x + "," + d.y + ")";
+                    }
+                    //update top-20 table
+                    //tops = nodes.slice(0, 20);
+          //here1
+          dbs_nodes = nodes.filter(node => node.gcin.startsWith("G"));
+          non_dbs_nodes = nodes.filter(node => !(node.gcin.startsWith("G")));
+
+          //$("#d3-dropdown").show();
+					$("#filtered-table-header").show();
+                    updateCandidates("#rank-table", dbs_nodes, 'DBS Companies');
+                    updateCandidates("#rank-table-non-dbs", non_dbs_nodes, 'Non DBS Companies');
+                }
+            );
+    }
+
+	function updateCandidates(tableId, nodes, title) {
+        d3.select(tableId).selectAll("table").remove();
+        var table = d3.select(tableId)
+            .append("table")
+            .attr("style", "font-size:0.5em;")
+            .attr("class", "table table-hover  table-fixed-long");
+
+        var columns = [
+            { head: 'Company', cl: 'title', html: title },
+        ];
+        table.append('thead')
+		   .append('tr')
+           .selectAll('th')
+           .data(columns).enter()
+           .append('th')
+           .attr('class', function(d) {return d.cl;})
+           .text(function(d) {return d.html;});
+		d3.select(tableId).selectAll("thead").attr('class', "thead-light");
+        // console.log(nodes);
+
+        var tr = table.append("tbody").selectAll("tr.dr")
+            .data(nodes).enter()
+            .append("tr")
+            // .attr("class", function(m) {return m.Status;});
+        tr.append("td")
+            .html(function(m) {return m.name;})
+        // tr.append("td")
+            // .html(function(m) {
+                // return "<button type=\"button\" class=\"btn btn-default\">"+m.name+"</button>";
+            // })
+            .on("click", function(m){
+                // tip.hide();
+                d3.select("#company-gcin")
+                    .text(m.name + " (" + m.GCIN + ")");
+                updateCompanyPlot(m.GCIN);
+                updateSummary(m);
+            });
+    }
+
+    function updateTable(tableId, nodes) {
+        d3.select(tableId).selectAll("table").remove();
+        var table = d3.select(tableId)
+            .append("table")
+            .attr("style", "font-size:0.7em;")
+            .attr("class", "table table-hover table-sm table-fixed-short");
+
+        var columns = [
+            { head: 'Company', cl: 'title', html: 'Company' },
+            { head: 'BS', cl: 'text-center', html: 'Buyer/Seller' },
+            { head: 'Status', cl: 'text-center', html: 'Customer Type' },
+            { head: 'Score', cl: 'text-center', html: 'Industry' }
+        ];
+        table.append('thead')
+		   .append('tr')
+           .selectAll('th')
+           .data(columns).enter()
+           .append('th')
+           .attr('class', function(d) {return d.cl;})
+           .text(function(d) {return d.html;});
+		d3.select(tableId).selectAll("thead").attr('class', "thead-light");
+
+
+
+        var tr = table.append("tbody").selectAll("tr.dr")
+            .data(nodes).enter()
+            .append("tr")
+            // .attr("class", function(m) {return m.Status;});
+        tr.append("td")
+            .html(function(m) {return m.name;})
+			.on("click", function(m){
+                // tip.hide();
+                d3.select("#company-gcin")
+                    .text(m.name + " (" + m.GCIN + ")");
+                updateCompanyPlot(m.GCIN)
+                updateSummary(m);
+			});
+        // tr.append("td")
+            // .html(function(m) {
+                // return "<button type=\"button\" class=\"btn btn-default\">"+m.GCIN+"</button>";
+            // })
+            // .on("click", function(m){
+                // // tip.hide();
+                // d3.select("#company-gcin")
+                    // .text(m.name + " (" + m.GCIN + ")");
+                // updateCompanyPlot(m.GCIN);
+            // });
+        tr.append("td")
+            .html(function(m) {return m.relationship;});
+		tr.append("td")
+            .html(function(m) {return m.Status;});
+        tr.append("td")
+            .attr("class", "text-center")
+			.html(function(m) {return m.ServiceSegment;})
+            //.html(function(m) {return m.score;});
+    }
+
+
+	function updateLinkTable(tableId, node) {
+        d3.select(tableId).selectAll("table").remove();
+        var table = d3.select(tableId)
+            .append("table")
+            .attr("class", "table table-hover");
+
+        var columns = [
+            { head: 'Buyer', cl: 'title', html: 'Buyer' },
+            { head: 'Seller', cl: 'text-center', html: 'Seller' },
+			{ head: 'System', cl: 'text-center', html: 'System' },
+            { head: 'Amount', cl: 'text-center', html: 'Value' },
+            { head: 'Count', cl: 'text-center', html: 'Volume' }
+        ];
+        table.append('thead')
+		   .append('tr')
+           .selectAll('th')
+           .data(columns).enter()
+           .append('th')
+           .attr('class', function(d) {return d.cl;})
+           .text(function(d) {return d.html;});
+		d3.select(tableId).selectAll("thead").attr('class', "thead-light");
+        var nodes =[node];
+		console.log(nodes);
+
+		var links = [
+      {buyer: node.source.name, seller: node.target.name, system: "OSCA Buyer-Seller", vol:'-', count: node.osca_type, indicator:node.osca_type},
+      {buyer: node.source.name, seller: node.target.name, system: "Cash", vol:node.amount_origin_tds, count: node.freq_origin_tds, indicator:node.tds_type},
+      {buyer: node.source.name, seller: node.target.name, system: "Trade",vol:node.amount_origin_imex, count: node.freq_origin_imex, indicator:node.imex_type},
+			{buyer: node.source.name, seller: node.target.name, system: "ARP", vol:node.amount_origin_fpro, count: node.freq_origin_fpro,indicator:node.fpro_type}
+		];
+
+    //filter to show only links with volume
+    links = links.filter(link => link.indicator>0);
+
+        var tr = table.append("tbody").selectAll("tr.dr")
+            .data(links).enter()
+            .append("tr")
+			//.attr("class", "DBS");
+            // .attr("class", function(m) {return m.Status;});
+
+		tr.append("td")
+		.html(function(m) {return m.buyer;});
+		tr.append("td")
+			.html(function(m) {return m.seller;});
+		tr.append("td")
+			.html(function(m) {return m.system;});
+		tr.append("td")
+			.html(function(m) {return m.vol;});
+		tr.append("td")
+			.html(function(m) {return m.count;});
+
+	}
+
+        // tr.append("td")
+            // .attr("class", "text-center")
+            // //.attr("style", function(m) {return "color:"+scoreColorScaler(m.amount)+";";})
+            // .html(function(m) {return m.amount;});
+    //}
+
+    function getFormattedSummaryHTML(label, value){
+      return [
+          "<strong><p class='text-sm-center'>" + value + "</p></strong>",
+          "<sub><b><font color='#cccccc' size='-5'><p class='text-sm-center'>"+ label + "</p></font></b></sub>"
+        ].join("\n");
+    }
+
+	function getFormattedSummaryHTML(label, value){
+		  return [
+			  "<strong>" + value + "</strong><br>",
+			  "<sub><b><font color='#cccccc' size='-5'>"+ label + "</font></b></sub>"
+			].join("\n");
+		}
+
+    function updateSummary(d){
+		var local_d = d
+		$("#summary-label-1").html(function(d) {
+		  return getFormattedSummaryHTML("TYPE", local_d.Status);
+		});
+
+		$("#summary-label-2").html(function(d) {
+		  return getFormattedSummaryHTML("SEGMENT", local_d.segment);
+		});
+
+		 $("#summary-label-3").html(function(d) {
+          return getFormattedSummaryHTML("INDUSTRY", local_d.gicindustry);
+		});
+
+		$("#summary-label-4").html(function(d) {
+			return getFormattedSummaryHTML("COUNTRY", local_d.bookingcountry);
+		});
+
+		$("#summary-label-5").html(function(d) {
+			return getFormattedSummaryHTML("ACRR", local_d.acrr);
+		});
+
+		$("#summary-label-6").html(function(d) {
+			return getFormattedSummaryHTML("RM", local_d.RelationshipManager);
+		});
+	}
+
+    // redraw company graph plot
+    function updateCompanyPlot(gcin) {
+        var url = "/company/" + encodeURIComponent(gcin);
+        // load company graph data
+
+        d3.json(url, function(data){
+            var nodes = data.nodes;
+            // nodes = nodes.sort(function(a,b) {return b.score-a.score;});
+            var links = data.links;
+            // console.log(nodes);
+            console.log(links);
+            // redraw the company graph plot
+            var width = 350,
+                height = 350;
+            d3.select("#company-plot").select("svg").remove();
+            d3.selectAll(".d3-tip").remove();
+
+			var svg = d3.select("#company-plot").append("svg")
+                .attr("width", width)
+                .attr("height", height)
+                .attr("viewBox", "0 0 " + width + " " + height )
+                .attr("preserveAspectRatio", "xMidYMin meet");
+            // static nodes, paths, texts
+            var force = d3.layout.force()
+                .nodes(nodes)
+                .links(links)
+                .size([width, height])
+                .linkDistance(80)
+                //.linkStrength(function (d, i){return d.weight;})
+                .charge(-5 * 1000 / nodes.length)
+                .gravity(0.25)
+                .on("tick", tick)
+                .start();
+            // Per-type markers, as they don't inherit styles.
+            svg.append("defs").selectAll("marker")
+                .data(["major", "minor"])
+				.enter().append("marker")
+                .attr("id", function(d) { return d; })
+                .attr("viewBox", "0 -5 10 10")
+                .attr("refX", 15)
+                .attr("refY", -1.5)
+                .attr("markerWidth", 6)
+                .attr("markerHeight", 6)
+                .attr("orient", "auto")
+                .attr("markerUnits", "userSpaceOnUse")
+                .attr("stroke-width", 1.5)
+				.append("path")
+                .attr("d", "M0,-5L10,0L0,5");
+
+            var tip = d3.tip()
+              .attr('class', 'd3-tip')
+              .offset([-10, 0])
+              .html(function(d) {
+                return [
+                    "<strong>"+d.name+"</strong>",
+                    "<hr>",
+                    "<strong>BookingCountry: "+d.bookingcountry+"</strong><br/>",
+                    "<strong>Segment: "+d.segment+"</strong><br/>",
+                    "<strong>Industry: "+d.ServiceSegment.toUpperCase()+"</strong><br/>",
+                    "<strong>ACRR: "+d.acrr+"</strong><br/>",
+                    "<strong>Type: "+d.Status+"</strong><br>"
+                ].join("\n");
+              });
+            svg.call(tip);
+
+            var pathWeightScale = d3.scale.linear()
+                .domain(d3.extent(links, function(d) {return d.weight;}))
+                .range([0.5, 4]);
+
+            var path = svg.append("g").selectAll("path")
+                .data(force.links())
+				.enter().append("path")
+                .attr("stroke-width", function(d) {return pathWeightScale(d.weight)+0.5;})
+                .attr("class", function(d) { return "link " + d.type; })
+
+        .on("mouseover", function(d) {
+          d3.select(this).attr("r", 10).style("fill", "#fff800");
+        })
+        .on("mouseout", function(d) {
+          d3.select(this).attr("r", 5.5).style("fill", "transparent");
+        })
+				.on("click", function(d, i) {
+					//console.log(d)
+					tip.hide();
+          //todo add a modal
+          d3.select("#id01").style("display","block");
+					$("#bs-table-header").html("Buyer-Seller Summary (Jan 2017 - Current)").show();
+					updateLinkTable("#bs-table", d);
+
+                    // d3.select("#company-gcin")
+                        // .text(d.name + " (" + d.GCIN + ")");
+                    // updateCompanyPlot(d.GCIN);
+                })
+				// .on("mouseenter", tip.show)
+                // .on("mouseout", tip.hide)
+				.attr("marker-end", function(d) { return "url(#" + "major" + ")"; });
+                //.attr("marker-end", function(d) { return "url(#" + d.type + ")"; });
+
+            var nodeRadiusScale = d3.scale.linear()
+                .domain(d3.extent(nodes, function(d) {return d.influence;}))
+                // .range([3, 8]);
+                .range([5, 10]);
+            var circle = svg.append("g").selectAll("circle")
+                .data(force.nodes())
+              .enter().append("circle")
+                .attr("r", function(d) {return nodeRadiusScale(d.influence);})
+                .attr("stroke", function(d) {
+                    // var strokeColor = "none";
+                    // if (d.GCIN === gcin) {
+                    //     strokeColor = "blue";
+                    // } else if (d.same_gpin) {
+                    //     strokeColor = "blue";
+                    // }
+                    // return strokeColor;
+                    if (d.GCIN === gcin || d.same_gpin) {
+                        // return nodeColorScale(d.score);
+                        return "#33f";
+						//return "none"
+                    } else {
+                        return "none";
+                    }
+                })
+                .attr("fill", function(d) {
+                    if (d.Status==="Customer") return "#ff6347";
+                    //if (d.Status==="Customer") return scoreColorScaler(0.5);
+                    else if (d.Status==="Prospect") return "#90EE90";
+                    else return "#ccc";
+                })
+                .style("fill-opacity", .7)
+                .on("dblclick", function(d, i) {
+                    tip.hide();
+                    d3.select("#company-gcin")
+                        .text(d.name + " (" + d.GCIN + ")");
+                    updateCompanyPlot(d.GCIN);
+                    updateSummary(d);
+                })
+                .on("mouseenter", tip.show)
+                .on("mouseout", tip.hide)
+                .call(force.drag);
+
+            var text = svg.append("g").selectAll("text")
+                .data(force.nodes())
+              .enter().append("text")
+                .attr("x", 8)
+                .attr("y", ".31em")
+                .attr("fill-opacity", 0.8)
+
+            // dynamic behavior
+            function tick() {
+              circle.attr("transform", transform);
+              text.attr("transform", transform);
+              path.attr("d", linkArc);
+            }
+		   function linkArc(d) {
+				var dx = d.target.x - d.source.x,
+				dy = d.target.y - d.source.y,
+				dr = Math.sqrt(dx * dx + dy * dy);
+				radius = nodeRadiusScale(d.target.influence)
+				offsetX = (dx * radius) / dr;
+				offsetY = (dy * radius) / dr;
+				return "M" + d.source.x + "," + d.source.y + "A" + dr + "," + dr + " 0 0,1 " + (d.target.x - offsetX) + "," + (d.target.y - offsetY);
+			}
+
+            function transform(d) {
+                margin = 20;
+                d.x = Math.max(margin, Math.min(width - margin, d.x));
+                d.y = Math.max(margin, Math.min(height - margin, d.y));
+                return "translate(" + d.x + "," + d.y + ")";
+            }
+
+            //legend
+            var linear = d3.scale.ordinal()
+              .domain(["major", "minor"])
+              .range(["red", "purple"]);
+
+
+            svg.append("g")
+              .attr("class", "legendLinear")
+              .attr("transform", "translate("+(width-120)+",10)");
+
+            var legendLinear = d3.legend.color()
+              .shapeWidth(20)
+              .shapeHeight(1)
+              .cells(["major", "minor"])
+              .orient('horizontal')
+              .scale(linear);
+
+            svg.select(".legendLinear")
+              .call(legendLinear);
+
+            // update internal and external partener table
+			$("#hop-selection").show();
+			$("#summary-header").show();
+			$("#summary-details").show();
+			$("#summary-details2").show();
+            $("#internal-table-header").show();
+            var internalParteners = nodes.filter(function (d) {
+                return d.same_gpin;
+            });
+
+            updateTable("#internal-partener", internalParteners);
+
+			$("#external-table-header").html("Counterparties").show();
+            var externalParteners = nodes.filter(function (d) {
+                return !d.same_gpin;
+            });
+
+            updateTable("#external-partener", externalParteners);
+
+        });
+    }
+
+    function setupSearchNode(nodes, links) {
+        $("#search-button").attr("disabled", false);
+        var optArray = [];
+		//console.log("search data ready:", nodes.length)
+        for (var i = 0; i < nodes.length - 1; i++) {
+            optArray.push(nodes[i].name+" ("+nodes[i].GCIN+")");
+
+			//console.log("data ready:", nodes[i].name, nodes[i].GCIN)
+        }
+        optArray = optArray.sort();
+        $(function () {
+            $("#search").autocomplete({
+                source: optArray
+            });
+        });
+
+    }
+
+    // start code
+    $('#bookingcountry').multiselect({
+              numberDisplayed: 1
+           });
+
+    $("#segment").multiselect({
+              numberDisplayed: 1
+           });
+
+    $("#ServiceSegment").multiselect({
+              enableCaseInsensitiveFiltering: true,
+              filterBehavior: 'both',
+    					maxHeight: 400,
+              numberDisplayed: 1,
+              templates: {
+                  filterClearBtn: '<span class="input-group-btn"><button class="btn btn-default multiselect-clear-filter" type="button">x</button></span>'
+              }
+    			 });
+
+	$("#RelationshipManager").multiselect({
+            numberDisplayed: 1
+         });
+
+    $("#search-button")
+        .attr("disabled", true)
+        .click(function (){
+            var selectedVal = $("#search").val();
+            var gcin = selectedVal.match(/\(.*?\)/g).pop();
+            gcin = gcin.slice(1, gcin.length-1);
+            console.log(gcin);
+            d3.select("#company-gcin")
+                .text(selectedVal);
+        updateCompanyPlot(gcin);
+
+        });
+})();
+
+
+function generateDropdownHTML(value, label) {
+  return '<li><a tabindex="0"><label class="checkbox"><input type="checkbox" value="' + value + '">' + label + '</label></a></li>';
+}
+
+var sub_segments = {
+  "IBG1-BANGALORE":"BANGALORE",
+  "IBG1-BEIJING":"BEIJING",
+  "IBG1-CHINESE ENTERPRISES 2":"CE2",
+  "IBG1-CHINESE ENTERPRISES 3":"CE3",
+  "IBG1-CHINESE ENTERPRISES 4":"CE4",
+  "IBG1-COMMODITIES":"COM",
+  "IBG1-ENERGY, CHEMICAL & INFRASTRUCTURE":"ECI",
+  "IBG1-FIG CHINA":"FIG CHINA",
+  "IBG1-FIG HONG KONG":"FIG HK",
+  "IBG1-FIG INDIA":"FIG INDIA",
+  "IBG1-FIG KOREA":"FIG KOREA",
+  "IBG1-FIG SINGAPORE":"FIG  ",
+  "IBG1-GENERAL INDUSTRIES-LABUAN":"GI  LBU",
+  "IBG1-GENERAL INDUSTRIES-LONDON":"GI  LDN",
+  "IBG1-GENERAL INDUSTRIES-LOS ANGELES":"GI LA",
+  "IBG1-GENERAL INDUSTRIES-SEOUL":"GI SEL",
+  "IBG1-GENERAL INDUSTRIES-VIETNAM":"GI VN",
+  "IBG1-GOVERNMENT LINKED CORPNS":"GLC",
+  "IBG1-HANGZHOU":"HANGZHOU",
+  "IBG1-HK CONGLOMERATES":"HK CONGLOMERATES",
+  "IBG1-HK TELECOMS, MEDIA & TECHNOLOGY":"HK TMT",
+  "IBG1-JAKARTA":"JAKARTA",
+  "IBG1-MUMBAI":"MUMBAI",
+  "IBG1-NEW DELHI":"NEW DELHI",
+  "IBG1-OTHERS":"OTHERS",
+  "IBG1-RE":"RE",
+  "IBG1-SCTF LONDON":"SCTF LONDON",
+  "IBG1-SHANGHAI":"SHANGHAI",
+  "IBG1-SHENZHEN":"SHENZHEN",
+  "IBG1-SHIPPING, AVIATION & TPT":"SAT",
+  "IBG1-SUZHOU":"SUZHOU",
+  "IBG1-TAIPEI GENERAL INDUSTRY":"GI TPE",
+  "IBG1-TELECOMMUNICATIONS, MEDIA & TECHNOLOGY":"TMT",
+  "IBG1-TIANJIN":"TIANJIN",
+  "IBG1-WESTERN MNC":"WMNC",
+  "IBG2-BANGALORE":"BANGALORE",
+  "IBG2-BEIJING":"BEIJING",
+  "IBG2-CHENNAI":"CHENNAI",
+  "IBG2-CONGLOMERATES & ASIAN CORPORATES":"CAC",
+  "IBG2-GENERAL INDUSTRIES":"GI",
+  "IBG2-GUANGZHOU":"GUANGZHOU",
+  "IBG2-JAKARTA":"JAKARTA",
+  "IBG2-MID CAP2":"MID CAP2",
+  "IBG2-MUMBAI":"MUMBAI",
+  "IBG2-SHANGHAI":"SHANGHAI",
+  "IBG2-TAIPEI":"TAIPEI",
+  "IBG3-BEIJING":"BEIJING",
+  "IBG3-CHENNAI":"CHENNAI",
+  "IBG3-E1":"E1",
+  "IBG3-E2":"E2",
+  "IBG3-E3":"E3",
+  "IBG3-E4":"E4",
+  "IBG3-E5":"E5",
+  "IBG3-E6":"E6",
+  "IBG3-E7":"E7",
+  "IBG3-E8":"E8",
+  "IBG3-MUMBAI":"MUMBAI",
+  "IBG3-OTHERS":"OTHERS",
+  "IBG3-SHANGHAI":"SHANGHAI",
+  "IBG4-EBC":"EBC",
+  "IBG4-ETM":"ETM",
+  "IBG4-JAKARTA":"JAKARTA",
+  "IBG4-MUMBAI":"MUMBAI",
+  "IBG4-NS1":"NS1",
+  "IBG4-NS2":"NS2",
+  "IBG4-OTHERS":"OTHERS",
+  "IBG4-PM":"PM",
+  "IBG4-PORTFOLIO SERVICE TEAM":"PST",
+  "IBG4-PS":"PS",
+  "IBG4-SD":"SD",
+  "UNKNOWN":"UNKNOWN"
+};
+
+var options = "";
+for(var key in sub_segments) {
+
+  if (key.startsWith("IBG4")) {
+    //console.log(key);
+    var value = sub_segments[key];
+    options = options + generateDropdownHTML(key, value);
+  }
+}
+
+//var options =  '<li><a tabindex="0"><label class="checkbox"><input type="checkbox" value="IBG1"> IBG1</label></a></li>';
+
+//$(".multiselect-container").eq(1).html(options);
+$("#segment").next().children('multiselect').hide();
+
+ $("#segment").change(function(){
+     var segments = this.value;
+     var segment_values = $(".multiselect-selected-text")[1];
+     console.log($("#segment").next().innerText);
+     console.log(segment_values.innerText);
+});
+(function(){
+    // event listener for filters
+    d3.select("#do-filter")
+        .on("click", function(){
+
+            // get the filter parameters
+            var bookingCountries = $("#bookingcountry").val();
+            var segments = $("#segment").val();
+            var ServiceSegment = $("#ServiceSegment").val();
+			var RelationshipManager = $("#RelationshipManager").val();
+			var CompanyName = $("#company_name").val();
+            // console.log(bookingCountries);
+            // console.log(segments);
+            // console.log(gicindustries);
+            // get the overall d3 plotting
+            updateOverallPlot({
+                // make sure the key are the columns in the generated company data
+                "bookingcountry": bookingCountries,
+                "segment": segments,
+                "ServiceSegment": ServiceSegment,
+				"RelationshipManager": RelationshipManager,
+				"name": CompanyName
+            });
+        });
+
+
+	var scoreColorScaler = d3.scale.sqrt()
+        .domain([0.1, 1])
+        .range(["#fff236", "#971724"])
+        .clamp(true);
+
+
+    // redraw overall graph plot
+    function updateOverallPlot(filters) {
+        d3.xhr("/overall/")
+            .header("Content-Type", "application/json")
+            .post(
+                JSON.stringify(filters),
+                function(err, rawData) {
+                    var data = JSON.parse(rawData.response);
+                    console.log("got response", data);
+                    // draw a less detailed graph
+                    var nodes = data.nodes;
+                    // nodes = nodes.sort(function(a,b) {return b.score-a.score;});
+                    var links = data.links;
+
+                    // setup search node box
+                    setupSearchNode(nodes, links);
+                    console.log("data ready:", nodes.length, links.length)
+                    // redraw the company graph plot
+                     var width = 350,
+                        height = 350,
+						x=0,
+						y=0;
+                    d3.select("#company-plot").select("svg").remove();
+                    d3.selectAll(".d3-tip").remove();
+                    var svg = d3.select("#company-plot").append("svg")
+                        .attr("width", width)
+                        .attr("height", height)
+                        .attr("viewBox", "0 0 " + width + " " + height )
+                        .attr("preserveAspectRatio", "xMidYMin meet")
+						.attr("x", x)
+                        .attr("y", y);
+
+                    //tool tip
+                    var tip = d3.tip()
+                      .attr('class', 'd3-tip')
+                      .offset([-10, 0])
+                      .html(function(d) {
+                        return [
+                            "<strong>"+d.name+"</strong>",
+                            "<hr />",
+                            // "<strong>BookingCountry: "+d.bookingcountry+"</strong>",
+                            // "<strong>RiskTakingCountry: "+d.risktakingcountry+"</strong>",
+                            "<strong>Segment: "+d.segment+"</strong>",
+                            //"<strong>GIC Industry: "+d.gicindustry+"</strong>"
+                            //"<strong>ACRR: "+d.acrr+"</strong><br/>",
+                            //"<strong>Status: "+d.Status+"</strong><br>",
+                            //"<strong>Score: <span style='color:"+scoreColorScaler(d.score)+";'>"+d.score+"</span></strong><br>",
+                            //"<strong>Facility Limit: "+d.facility_limit+"</strong><br>",
+                            //"<strong>Outstanding Amount: "+d.outstanding_amount+"</strong>"
+							"<strong>GIC Industry: "+d.ServiceSegment+"</strong>"
+                        ].join("\n");
+                      });
+                    svg.call(tip);
+
+                    // static nodes, paths, texts
+                    var nnodes = nodes.length;
+                    var force = d3.layout.force()
+                        .nodes(nodes)
+                        .links(links)
+                        .size([width, height])
+                        .linkDistance(120)
+                        //.linkStrength(function (d, i){return d.weight;})
+                        // .charge(-15)
+                        .charge(-5 * 1000 / nnodes)
+                        .gravity(0.25)
+                        .on("tick", tick)
+                        .start();
+                    // Per-type markers, as they don't inherit styles.
+                    svg.append("defs").selectAll("marker")
+                        .data(["rem", "imex", "bs", "fpro"])
+                      .enter().append("marker")
+                        .attr("id", function(d) { return d; })
+                        .attr("viewBox", "0 -5 10 10")
+                        .attr("refX", 15)
+                        .attr("refY", -1.5)
+                        .attr("markerWidth", 6)
+                        .attr("markerHeight", 6)
+                        .attr("orient", "auto")
+                      .append("path")
+                        .attr("d", "M0,-5L10,0L0,5");
+
+                    var pathWeightScale = d3.scale.linear()
+                        .domain(d3.extent(links, function(d) {return d.weight;}))
+                        .range([1, 2]);
+                    var path = svg.append("g").selectAll("path")
+                        .data(force.links())
+                      .enter().append("path")
+                        // .attr("stroke-width", function(d) {return pathWeightScale(d.weight);})
+                        .attr("class", function(d) { return "link " + d.type; })
+                        // .attr("marker-end", function(d) { return "url(#" + d.type + ")"; })
+                        ;
+
+
+					var nodeRadiusScale = d3.scale.linear()
+                        .domain(d3.extent(nodes, function(d) {return d.influence;}))
+                        // .range([3, 8]);
+                        .range([5, 10]);
+                    var circle = svg.append("g").selectAll("circle")
+                        .data(force.nodes())
+                      .enter().append("circle")
+                        .attr("r", function(d) {return nodeRadiusScale(d.influence);})
+                        .attr("fill", function(d) {
+                            if (d.Status==="Customer") return "#ff6347";
+                            //if (d.Status==="Customer") return scoreColorScaler(0.5);
+                            else if (d.Status==="Prospect") return "#90EE90";
+                            else return "#ccc";
+                        })
+                        .on("click", function(d, i) {
+							tip.hide();
+                            d3.select("#company-gcin")
+                                .text(d.name + " (" + d.GCIN + ")");
+                            updateCompanyPlot(d.GCIN);
+                            updateSummary(d);
+                        })
+                        .on("mouseenter", tip.show)
+                        .on("mouseout", tip.hide)
+                        .call(force.drag);
+
+                    // dynamic behavior
+                    function tick() {
+                      path.attr("d", linkArc);
+                      circle.attr("transform", transform);
+                      // text.attr("transform", transform);
+                    }
+                    function linkArc(d) {
+                      var dx = d.target.x - d.source.x,
+                          dy = d.target.y - d.source.y,
+                          dr = Math.sqrt(dx * dx + dy * dy);
+                      return "M" + d.source.x + "," + d.source.y + "A" + dr + "," + dr + " 0 0,1 " + (d.target.x) + "," + (d.target.y);
+                    }
+                    function transform(d) {
+                        margin = 20;
+                        d.x = Math.max(margin, Math.min(width - margin, d.x));
+                        d.y = Math.max(margin, Math.min(height - margin, d.y));
+                        return "translate(" + d.x + "," + d.y + ")";
+                    }
+                    //update top-20 table
+                    //tops = nodes.slice(0, 20);
+          //here1
+          dbs_nodes = nodes.filter(node => node.gcin.startsWith("G"));
+          non_dbs_nodes = nodes.filter(node => !(node.gcin.startsWith("G")));
+
+          //$("#d3-dropdown").show();
+					$("#filtered-table-header").show();
+                    updateCandidates("#rank-table", dbs_nodes, 'DBS Companies');
+                    updateCandidates("#rank-table-non-dbs", non_dbs_nodes, 'Non DBS Companies');
+                }
+            );
+    }
+
+	function updateCandidates(tableId, nodes, title) {
+        d3.select(tableId).selectAll("table").remove();
+        var table = d3.select(tableId)
+            .append("table")
+            .attr("style", "font-size:0.5em;")
+            .attr("class", "table table-hover  table-fixed-long");
+
+        var columns = [
+            { head: 'Company', cl: 'title', html: title },
+        ];
+        table.append('thead')
+		   .append('tr')
+           .selectAll('th')
+           .data(columns).enter()
+           .append('th')
+           .attr('class', function(d) {return d.cl;})
+           .text(function(d) {return d.html;});
+		d3.select(tableId).selectAll("thead").attr('class', "thead-light");
+        // console.log(nodes);
+
+        var tr = table.append("tbody").selectAll("tr.dr")
+            .data(nodes).enter()
+            .append("tr")
+            // .attr("class", function(m) {return m.Status;});
+        tr.append("td")
+            .html(function(m) {return m.name;})
+        // tr.append("td")
+            // .html(function(m) {
+                // return "<button type=\"button\" class=\"btn btn-default\">"+m.name+"</button>";
+            // })
+            .on("click", function(m){
+                // tip.hide();
+                d3.select("#company-gcin")
+                    .text(m.name + " (" + m.GCIN + ")");
+                updateCompanyPlot(m.GCIN);
+                updateSummary(m);
+            });
+    }
+
+    function updateTable(tableId, nodes) {
+        d3.select(tableId).selectAll("table").remove();
+        var table = d3.select(tableId)
+            .append("table")
+            .attr("style", "font-size:0.7em;")
+            .attr("class", "table table-hover table-sm table-fixed-short");
+
+        var columns = [
+            { head: 'Company', cl: 'title', html: 'Company' },
+            { head: 'BS', cl: 'text-center', html: 'Buyer/Seller' },
+            { head: 'Status', cl: 'text-center', html: 'Customer Type' },
+            { head: 'Score', cl: 'text-center', html: 'Industry' }
+        ];
+        table.append('thead')
+		   .append('tr')
+           .selectAll('th')
+           .data(columns).enter()
+           .append('th')
+           .attr('class', function(d) {return d.cl;})
+           .text(function(d) {return d.html;});
+		d3.select(tableId).selectAll("thead").attr('class', "thead-light");
+
+
+
+        var tr = table.append("tbody").selectAll("tr.dr")
+            .data(nodes).enter()
+            .append("tr")
+            // .attr("class", function(m) {return m.Status;});
+        tr.append("td")
+            .html(function(m) {return m.name;})
+			.on("click", function(m){
+                // tip.hide();
+                d3.select("#company-gcin")
+                    .text(m.name + " (" + m.GCIN + ")");
+                updateCompanyPlot(m.GCIN)
+                updateSummary(m);
+			});
+        // tr.append("td")
+            // .html(function(m) {
+                // return "<button type=\"button\" class=\"btn btn-default\">"+m.GCIN+"</button>";
+            // })
+            // .on("click", function(m){
+                // // tip.hide();
+                // d3.select("#company-gcin")
+                    // .text(m.name + " (" + m.GCIN + ")");
+                // updateCompanyPlot(m.GCIN);
+            // });
+        tr.append("td")
+            .html(function(m) {return m.relationship;});
+		tr.append("td")
+            .html(function(m) {return m.Status;});
+        tr.append("td")
+            .attr("class", "text-center")
+			.html(function(m) {return m.ServiceSegment;})
+            //.html(function(m) {return m.score;});
+    }
+
+
+	function updateLinkTable(tableId, node) {
+        d3.select(tableId).selectAll("table").remove();
+        var table = d3.select(tableId)
+            .append("table")
+            .attr("class", "table table-hover");
+
+        var columns = [
+            { head: 'Buyer', cl: 'title', html: 'Buyer' },
+            { head: 'Seller', cl: 'text-center', html: 'Seller' },
+			{ head: 'System', cl: 'text-center', html: 'System' },
+            { head: 'Amount', cl: 'text-center', html: 'Value' },
+            { head: 'Count', cl: 'text-center', html: 'Volume' }
+        ];
+        table.append('thead')
+		   .append('tr')
+           .selectAll('th')
+           .data(columns).enter()
+           .append('th')
+           .attr('class', function(d) {return d.cl;})
+           .text(function(d) {return d.html;});
+		d3.select(tableId).selectAll("thead").attr('class', "thead-light");
+        var nodes =[node];
+		console.log(nodes);
+
+		var links = [
+      {buyer: node.source.name, seller: node.target.name, system: "OSCA Buyer-Seller", vol:'-', count: node.osca_type, indicator:node.osca_type},
+      {buyer: node.source.name, seller: node.target.name, system: "Cash", vol:node.amount_origin_tds, count: node.freq_origin_tds, indicator:node.tds_type},
+      {buyer: node.source.name, seller: node.target.name, system: "Trade",vol:node.amount_origin_imex, count: node.freq_origin_imex, indicator:node.imex_type},
+			{buyer: node.source.name, seller: node.target.name, system: "ARP", vol:node.amount_origin_fpro, count: node.freq_origin_fpro,indicator:node.fpro_type}
+		];
+
+    //filter to show only links with volume
+    links = links.filter(link => link.indicator>0);
+
+        var tr = table.append("tbody").selectAll("tr.dr")
+            .data(links).enter()
+            .append("tr")
+			//.attr("class", "DBS");
+            // .attr("class", function(m) {return m.Status;});
+
+		tr.append("td")
+		.html(function(m) {return m.buyer;});
+		tr.append("td")
+			.html(function(m) {return m.seller;});
+		tr.append("td")
+			.html(function(m) {return m.system;});
+		tr.append("td")
+			.html(function(m) {return m.vol;});
+		tr.append("td")
+			.html(function(m) {return m.count;});
+
+	}
+
+        // tr.append("td")
+            // .attr("class", "text-center")
+            // //.attr("style", function(m) {return "color:"+scoreColorScaler(m.amount)+";";})
+            // .html(function(m) {return m.amount;});
+    //}
+
+    function getFormattedSummaryHTML(label, value){
+      return [
+          "<strong><p class='text-sm-center'>" + value + "</p></strong>",
+          "<sub><b><font color='#cccccc' size='-5'><p class='text-sm-center'>"+ label + "</p></font></b></sub>"
+        ].join("\n");
+    }
+
+	function getFormattedSummaryHTML(label, value){
+		  return [
+			  "<strong>" + value + "</strong><br>",
+			  "<sub><b><font color='#cccccc' size='-5'>"+ label + "</font></b></sub>"
+			].join("\n");
+		}
+
+    function updateSummary(d){
+		var local_d = d
+		$("#summary-label-1").html(function(d) {
+		  return getFormattedSummaryHTML("TYPE", local_d.Status);
+		});
+
+		$("#summary-label-2").html(function(d) {
+		  return getFormattedSummaryHTML("SEGMENT", local_d.segment);
+		});
+
+		 $("#summary-label-3").html(function(d) {
+          return getFormattedSummaryHTML("INDUSTRY", local_d.gicindustry);
+		});
+
+		$("#summary-label-4").html(function(d) {
+			return getFormattedSummaryHTML("COUNTRY", local_d.bookingcountry);
+		});
+
+		$("#summary-label-5").html(function(d) {
+			return getFormattedSummaryHTML("ACRR", local_d.acrr);
+		});
+
+		$("#summary-label-6").html(function(d) {
+			return getFormattedSummaryHTML("RM", local_d.RelationshipManager);
+		});
+	}
+
+    // redraw company graph plot
+    function updateCompanyPlot(gcin) {
+        var url = "/company/" + encodeURIComponent(gcin);
+        // load company graph data
+
+        d3.json(url, function(data){
+            var nodes = data.nodes;
+            // nodes = nodes.sort(function(a,b) {return b.score-a.score;});
+            var links = data.links;
+            // console.log(nodes);
+            console.log(links);
+            // redraw the company graph plot
+            var width = 350,
+                height = 350;
+            d3.select("#company-plot").select("svg").remove();
+            d3.selectAll(".d3-tip").remove();
+
+			var svg = d3.select("#company-plot").append("svg")
+                .attr("width", width)
+                .attr("height", height)
+                .attr("viewBox", "0 0 " + width + " " + height )
+                .attr("preserveAspectRatio", "xMidYMin meet");
+            // static nodes, paths, texts
+            var force = d3.layout.force()
+                .nodes(nodes)
+                .links(links)
+                .size([width, height])
+                .linkDistance(80)
+                //.linkStrength(function (d, i){return d.weight;})
+                .charge(-5 * 1000 / nodes.length)
+                .gravity(0.25)
+                .on("tick", tick)
+                .start();
+            // Per-type markers, as they don't inherit styles.
+            svg.append("defs").selectAll("marker")
+                .data(["major", "minor"])
+				.enter().append("marker")
+                .attr("id", function(d) { return d; })
+                .attr("viewBox", "0 -5 10 10")
+                .attr("refX", 15)
+                .attr("refY", -1.5)
+                .attr("markerWidth", 6)
+                .attr("markerHeight", 6)
+                .attr("orient", "auto")
+                .attr("markerUnits", "userSpaceOnUse")
+                .attr("stroke-width", 1.5)
+				.append("path")
+                .attr("d", "M0,-5L10,0L0,5");
+
+            var tip = d3.tip()
+              .attr('class', 'd3-tip')
+              .offset([-10, 0])
+              .html(function(d) {
+                return [
+                    "<strong>"+d.name+"</strong>",
+                    "<hr>",
+                    "<strong>BookingCountry: "+d.bookingcountry+"</strong><br/>",
+                    "<strong>Segment: "+d.segment+"</strong><br/>",
+                    "<strong>Industry: "+d.ServiceSegment.toUpperCase()+"</strong><br/>",
+                    "<strong>ACRR: "+d.acrr+"</strong><br/>",
+                    "<strong>Type: "+d.Status+"</strong><br>"
+                ].join("\n");
+              });
+            svg.call(tip);
+
+            var pathWeightScale = d3.scale.linear()
+                .domain(d3.extent(links, function(d) {return d.weight;}))
+                .range([0.5, 4]);
+
+            var path = svg.append("g").selectAll("path")
+                .data(force.links())
+				.enter().append("path")
+                .attr("stroke-width", function(d) {return pathWeightScale(d.weight)+0.5;})
+                .attr("class", function(d) { return "link " + d.type; })
+
+        .on("mouseover", function(d) {
+          d3.select(this).attr("r", 10).style("fill", "#fff800");
+        })
+        .on("mouseout", function(d) {
+          d3.select(this).attr("r", 5.5).style("fill", "transparent");
+        })
+				.on("click", function(d, i) {
+					//console.log(d)
+					tip.hide();
+          //todo add a modal
+          d3.select("#id01").style("display","block");
+					$("#bs-table-header").html("Buyer-Seller Summary (Jan 2017 - Current)").show();
+					updateLinkTable("#bs-table", d);
+
+                    // d3.select("#company-gcin")
+                        // .text(d.name + " (" + d.GCIN + ")");
+                    // updateCompanyPlot(d.GCIN);
+                })
+				// .on("mouseenter", tip.show)
+                // .on("mouseout", tip.hide)
+				.attr("marker-end", function(d) { return "url(#" + "major" + ")"; });
+                //.attr("marker-end", function(d) { return "url(#" + d.type + ")"; });
+
+            var nodeRadiusScale = d3.scale.linear()
+                .domain(d3.extent(nodes, function(d) {return d.influence;}))
+                // .range([3, 8]);
+                .range([5, 10]);
+            var circle = svg.append("g").selectAll("circle")
+                .data(force.nodes())
+              .enter().append("circle")
+                .attr("r", function(d) {return nodeRadiusScale(d.influence);})
+                .attr("stroke", function(d) {
+                    // var strokeColor = "none";
+                    // if (d.GCIN === gcin) {
+                    //     strokeColor = "blue";
+                    // } else if (d.same_gpin) {
+                    //     strokeColor = "blue";
+                    // }
+                    // return strokeColor;
+                    if (d.GCIN === gcin || d.same_gpin) {
+                        // return nodeColorScale(d.score);
+                        return "#33f";
+						//return "none"
+                    } else {
+                        return "none";
+                    }
+                })
+                .attr("fill", function(d) {
+                    if (d.Status==="Customer") return "#ff6347";
+                    //if (d.Status==="Customer") return scoreColorScaler(0.5);
+                    else if (d.Status==="Prospect") return "#90EE90";
+                    else return "#ccc";
+                })
+                .style("fill-opacity", .7)
+                .on("dblclick", function(d, i) {
+                    tip.hide();
+                    d3.select("#company-gcin")
+                        .text(d.name + " (" + d.GCIN + ")");
+                    updateCompanyPlot(d.GCIN);
+                    updateSummary(d);
+                })
+                .on("mouseenter", tip.show)
+                .on("mouseout", tip.hide)
+                .call(force.drag);
+
+            var text = svg.append("g").selectAll("text")
+                .data(force.nodes())
+              .enter().append("text")
+                .attr("x", 8)
+                .attr("y", ".31em")
+                .attr("fill-opacity", 0.8)
+
+            // dynamic behavior
+            function tick() {
+              circle.attr("transform", transform);
+              text.attr("transform", transform);
+              path.attr("d", linkArc);
+            }
+		   function linkArc(d) {
+				var dx = d.target.x - d.source.x,
+				dy = d.target.y - d.source.y,
+				dr = Math.sqrt(dx * dx + dy * dy);
+				radius = nodeRadiusScale(d.target.influence)
+				offsetX = (dx * radius) / dr;
+				offsetY = (dy * radius) / dr;
+				return "M" + d.source.x + "," + d.source.y + "A" + dr + "," + dr + " 0 0,1 " + (d.target.x - offsetX) + "," + (d.target.y - offsetY);
+			}
+
+            function transform(d) {
+                margin = 20;
+                d.x = Math.max(margin, Math.min(width - margin, d.x));
+                d.y = Math.max(margin, Math.min(height - margin, d.y));
+                return "translate(" + d.x + "," + d.y + ")";
+            }
+
+            //legend
+            var linear = d3.scale.ordinal()
+              .domain(["major", "minor"])
+              .range(["red", "purple"]);
+
+
+            svg.append("g")
+              .attr("class", "legendLinear")
+              .attr("transform", "translate("+(width-120)+",10)");
+
+            var legendLinear = d3.legend.color()
+              .shapeWidth(20)
+              .shapeHeight(1)
+              .cells(["major", "minor"])
+              .orient('horizontal')
+              .scale(linear);
+
+            svg.select(".legendLinear")
+              .call(legendLinear);
+
+            // update internal and external partener table
+			$("#hop-selection").show();
+			$("#summary-header").show();
+			$("#summary-details").show();
+			$("#summary-details2").show();
+            $("#internal-table-header").show();
+            var internalParteners = nodes.filter(function (d) {
+                return d.same_gpin;
+            });
+
+            updateTable("#internal-partener", internalParteners);
+
+			$("#external-table-header").html("Counterparties").show();
+            var externalParteners = nodes.filter(function (d) {
+                return !d.same_gpin;
+            });
+
+            updateTable("#external-partener", externalParteners);
+
+        });
+    }
+
+    function setupSearchNode(nodes, links) {
+        $("#search-button").attr("disabled", false);
+        var optArray = [];
+		//console.log("search data ready:", nodes.length)
+        for (var i = 0; i < nodes.length - 1; i++) {
+            optArray.push(nodes[i].name+" ("+nodes[i].GCIN+")");
+
+			//console.log("data ready:", nodes[i].name, nodes[i].GCIN)
+        }
+        optArray = optArray.sort();
+        $(function () {
+            $("#search").autocomplete({
+                source: optArray
+            });
+        });
+
+    }
+
+    // start code
+    $('#bookingcountry').multiselect({
+              numberDisplayed: 1
+           });
+
+    $("#segment").multiselect({
+              numberDisplayed: 1
+           });
+
+    $("#ServiceSegment").multiselect({
+              enableCaseInsensitiveFiltering: true,
+              filterBehavior: 'both',
+    					maxHeight: 400,
+              numberDisplayed: 1,
+              templates: {
+                  filterClearBtn: '<span class="input-group-btn"><button class="btn btn-default multiselect-clear-filter" type="button">x</button></span>'
+              }
+    			 });
+
+	$("#RelationshipManager").multiselect({
+            numberDisplayed: 1
+         });
+
+    $("#search-button")
+        .attr("disabled", true)
+        .click(function (){
+            var selectedVal = $("#search").val();
+            var gcin = selectedVal.match(/\(.*?\)/g).pop();
+            gcin = gcin.slice(1, gcin.length-1);
+            console.log(gcin);
+            d3.select("#company-gcin")
+                .text(selectedVal);
+        updateCompanyPlot(gcin);
+
+        });
+})();
+
+
+function generateDropdownHTML(value, label) {
+  return '<li><a tabindex="0"><label class="checkbox"><input type="checkbox" value="' + value + '">' + label + '</label></a></li>';
+}
+
+var sub_segments = {
+  "IBG1-BANGALORE":"BANGALORE",
+  "IBG1-BEIJING":"BEIJING",
+  "IBG1-CHINESE ENTERPRISES 2":"CE2",
+  "IBG1-CHINESE ENTERPRISES 3":"CE3",
+  "IBG1-CHINESE ENTERPRISES 4":"CE4",
+  "IBG1-COMMODITIES":"COM",
+  "IBG1-ENERGY, CHEMICAL & INFRASTRUCTURE":"ECI",
+  "IBG1-FIG CHINA":"FIG CHINA",
+  "IBG1-FIG HONG KONG":"FIG HK",
+  "IBG1-FIG INDIA":"FIG INDIA",
+  "IBG1-FIG KOREA":"FIG KOREA",
+  "IBG1-FIG SINGAPORE":"FIG  ",
+  "IBG1-GENERAL INDUSTRIES-LABUAN":"GI  LBU",
+  "IBG1-GENERAL INDUSTRIES-LONDON":"GI  LDN",
+  "IBG1-GENERAL INDUSTRIES-LOS ANGELES":"GI LA",
+  "IBG1-GENERAL INDUSTRIES-SEOUL":"GI SEL",
+  "IBG1-GENERAL INDUSTRIES-VIETNAM":"GI VN",
+  "IBG1-GOVERNMENT LINKED CORPNS":"GLC",
+  "IBG1-HANGZHOU":"HANGZHOU",
+  "IBG1-HK CONGLOMERATES":"HK CONGLOMERATES",
+  "IBG1-HK TELECOMS, MEDIA & TECHNOLOGY":"HK TMT",
+  "IBG1-JAKARTA":"JAKARTA",
+  "IBG1-MUMBAI":"MUMBAI",
+  "IBG1-NEW DELHI":"NEW DELHI",
+  "IBG1-OTHERS":"OTHERS",
+  "IBG1-RE":"RE",
+  "IBG1-SCTF LONDON":"SCTF LONDON",
+  "IBG1-SHANGHAI":"SHANGHAI",
+  "IBG1-SHENZHEN":"SHENZHEN",
+  "IBG1-SHIPPING, AVIATION & TPT":"SAT",
+  "IBG1-SUZHOU":"SUZHOU",
+  "IBG1-TAIPEI GENERAL INDUSTRY":"GI TPE",
+  "IBG1-TELECOMMUNICATIONS, MEDIA & TECHNOLOGY":"TMT",
+  "IBG1-TIANJIN":"TIANJIN",
+  "IBG1-WESTERN MNC":"WMNC",
+  "IBG2-BANGALORE":"BANGALORE",
+  "IBG2-BEIJING":"BEIJING",
+  "IBG2-CHENNAI":"CHENNAI",
+  "IBG2-CONGLOMERATES & ASIAN CORPORATES":"CAC",
+  "IBG2-GENERAL INDUSTRIES":"GI",
+  "IBG2-GUANGZHOU":"GUANGZHOU",
+  "IBG2-JAKARTA":"JAKARTA",
+  "IBG2-MID CAP2":"MID CAP2",
+  "IBG2-MUMBAI":"MUMBAI",
+  "IBG2-SHANGHAI":"SHANGHAI",
+  "IBG2-TAIPEI":"TAIPEI",
+  "IBG3-BEIJING":"BEIJING",
+  "IBG3-CHENNAI":"CHENNAI",
+  "IBG3-E1":"E1",
+  "IBG3-E2":"E2",
+  "IBG3-E3":"E3",
+  "IBG3-E4":"E4",
+  "IBG3-E5":"E5",
+  "IBG3-E6":"E6",
+  "IBG3-E7":"E7",
+  "IBG3-E8":"E8",
+  "IBG3-MUMBAI":"MUMBAI",
+  "IBG3-OTHERS":"OTHERS",
+  "IBG3-SHANGHAI":"SHANGHAI",
+  "IBG4-EBC":"EBC",
+  "IBG4-ETM":"ETM",
+  "IBG4-JAKARTA":"JAKARTA",
+  "IBG4-MUMBAI":"MUMBAI",
+  "IBG4-NS1":"NS1",
+  "IBG4-NS2":"NS2",
+  "IBG4-OTHERS":"OTHERS",
+  "IBG4-PM":"PM",
+  "IBG4-PORTFOLIO SERVICE TEAM":"PST",
+  "IBG4-PS":"PS",
+  "IBG4-SD":"SD",
+  "UNKNOWN":"UNKNOWN"
+};
+
+var options = "";
+for(var key in sub_segments) {
+
+  if (key.startsWith("IBG4")) {
+    //console.log(key);
+    var value = sub_segments[key];
+    options = options + generateDropdownHTML(key, value);
+  }
+}
+
+//var options =  '<li><a tabindex="0"><label class="checkbox"><input type="checkbox" value="IBG1"> IBG1</label></a></li>';
+
+//$(".multiselect-container").eq(1).html(options);
+$("#segment").next().children('multiselect').hide();
+
+ $("#segment").change(function(){
+     var segments = this.value;
+     var segment_values = $(".multiselect-selected-text")[1];
+     console.log($("#segment").next().innerText);
+     console.log(segment_values.innerText);
+});
