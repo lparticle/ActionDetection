@@ -1,0 +1,254 @@
+import pandas as pd
+import numpy as np
+from glob import glob
+from os import path
+
+
+companies = pd.read_csv("data/generated_companies.csv", low_memory=False, dtype= {"name": str}, encoding = "latin1").set_index("GCIN", drop=False)
+
+
+companies = companies.dropna()
+print('companies.shapecompanies.shapecompanies.shapecompanies.shape')
+print(companies.shape)
+transactions = pd.read_csv("data/generated_transactions.csv")
+transactions = transactions.dropna()
+transactions = transactions.loc[transactions.GCIN_1!= transactions.GCIN_2]
+company_groups = pd.read_csv("data/generated_groups.csv").set_index("GCIN", drop=False)
+
+
+def process_nodes(nodes):
+    nodes["internal_score"] = map(lambda s: float(s) if s not in ["HEALTHY"] else -100, nodes.score)
+    nodes.sort_values(by="internal_score", inplace=True, ascending=False)
+    nodes["index"] = np.arange(nodes.shape[0])
+    return nodes
+
+def process_links(nodes, gcins):
+
+
+    links = transactions[transactions.GCIN_1.isin(gcins) & transactions.GCIN_2.isin(gcins)]
+
+    print "link"
+    print links
+
+    print "nodes.location"
+    print nodes.loc[links.GCIN_1,"index"].shape
+
+    print links.GCIN_1
+    print links.shape
+#    links["source"] = pd.Series(nodes.loc[links.GCIN_1,"index"])
+#    links["target"] = pd.Series(nodes.loc[links.GCIN_2,"index"])
+
+    print 'NODE NODE NODE'
+    print nodes
+
+    links["source"] = np.asarray(nodes.loc[links.GCIN_1,"index"])
+
+    print 'links["source"]'
+    print links["source"]
+
+    links["target"] = np.asarray(nodes.loc[links.GCIN_2,"index"])
+
+    print 'links["target"]'
+    print links["target"]
+
+    links = links.loc[links.source != links.target]
+
+    #localise thickness of weight for view
+    links['weight']=0.049 * (links.amount-links.amount.min()) / (links.amount.max()-links.amount.min())
+    #osca type is thickest
+    links.loc[links['osca_type'] == 1, 'weight'] = 0.05
+
+    #print "####### links #########"
+    #print links.head()
+    #links.to_csv("temp.csv")
+
+    return links
+
+def get_nodes_influence(nodes, links):
+    # # RECALCULATE company influence is the degree of incoming/outgoing connections
+    gcin1_counts = pd.value_counts(links.GCIN_1)
+    gcin2_counts = pd.value_counts(links.GCIN_2)
+    # nodes["influence"] = np.asarray([gcin1_counts.get(cin, 0) + gcin2_counts.get(cin, 0)
+    # USE the nodes influnce as without filtering
+        # for cin in nodes.GCIN])
+    nodes["influence"] = np.asarray([gcin1_counts.get(cin, 0) + gcin2_counts.get(cin, 0)
+        for cin in nodes.GCIN])
+    #print nodes.head()
+    # print links.head()
+    return nodes
+
+
+def load_graph():
+    nodes = companies.copy()
+
+    gcins = pd.unique(nodes.GCIN)
+    # nodes.sort_values(by="score", inplace=True, ascending=True)
+
+    nodes = process_nodes(nodes)
+    links = process_links(nodes, gcins)
+    nodes = get_nodes_influence(nodes, links)
+
+    print "nodeeeeeeeeeeeeeeeeeeeeeee"
+    print nodes
+
+    return {
+        "nodes": nodes.to_dict(orient="records"),
+        "links": links.to_dict(orient="records")
+    }
+
+
+# support functions for query
+def get_overall_graph(filters):
+    # filtering
+    overall_condition = None
+    for col, vals in filters.items():
+
+		if col=="name":
+			val = vals.upper()
+			condition = (companies[col].apply(lambda x: x.upper().startswith(val)))
+			if overall_condition is None:
+				overall_condition = (condition)
+			else:
+				overall_condition &= (condition)
+
+		else:
+			condition = None
+			for val in vals:
+				if condition is None:
+					condition = (companies[col] == val)
+				else:
+					condition |= (companies[col] == val)
+			if condition is None: continue
+			if overall_condition is None:
+				overall_condition = (condition)
+			else:
+				overall_condition &= (condition)
+
+
+    filtered_companies = companies if overall_condition is None else companies.loc[overall_condition]
+    # print companies.shape, "filtered to", filtered_companies.shape
+    # construct nodes and links
+    nodes = filtered_companies.copy()
+    gcins = pd.unique(nodes.GCIN)
+    # nodes.sort_values(by="score", inplace=True, ascending=True)
+    nodes = process_nodes(nodes)
+    links = process_links(nodes, gcins)
+    nodes = get_nodes_influence(nodes, links)
+    return {
+        "nodes": nodes.to_dict(orient="records"),
+        "links": links.to_dict(orient="records")
+    }
+
+
+#helper function for get_company_graph
+def get_level_gcin(gcin, level, get_sameGpin_gcins):
+    root_gcin = gcin
+    sameGpin_gcins = set([])
+    if gcin in company_groups.GCIN:
+        root_gpin = company_groups.loc[root_gcin].GPIN # TODO: why multiple GPIN ??
+        if type(root_gpin) == str:
+            root_gpin = [root_gpin]
+        else:
+            root_gpin = list(root_gpin)
+        sameGpin_gcins = set(company_groups[company_groups.GPIN.isin(root_gpin)].GCIN)
+
+    if get_sameGpin_gcins:
+        return sameGpin_gcins
+    # level1_df = transactions[transactions.GCIN_1.isin(sameGpin_gcins) | transactions.GCIN_2.isin(sameGpin_gcins)]
+    level1_df = transactions[(transactions.GCIN_1==root_gcin) | (transactions.GCIN_2==root_gcin)]
+
+    level1_gcins = set(level1_df.GCIN_1).union(set(level1_df.GCIN_2))
+
+    # print "root:", root_gcin, root_gpin
+    # print "level1 gcins:", sameGpin_gcins
+    # print "level2 gcins:", level1_gcins
+    gcins_set = sameGpin_gcins.union(level1_gcins)
+    gcins = np.asarray(list(gcins_set))
+    # print "merged gcins:", gcins
+    if level == 1:
+        return gcins
+    else:
+        level2_df = transactions[(transactions.GCIN_1.isin(level1_gcins)) | (transactions.GCIN_2.isin(level1_gcins))]
+        level2_gcins = set(level2_df.GCIN_1).union(set(level2_df.GCIN_2))
+        gcins_set = gcins_set.union(level2_gcins)
+        gcins = np.asarray(list(gcins_set))
+        if level ==2:
+            return gcins
+        else:
+            #level = 3
+            level3_df = transactions[(transactions.GCIN_1.isin(level2_gcins)) | (transactions.GCIN_2.isin(level2_gcins))]
+            level3_gcins = set(level3_df.GCIN_1).union(set(level3_df.GCIN_2))
+            gcins_set = gcins_set.union(level3_gcins)
+            gcins = np.asarray(list(gcins_set))
+            return gcins
+
+
+def get_company_graph(gcin, level):
+    # """"
+    # if gcin not in company_groups.GCIN:
+		# print("Cannot find the company", gcin)
+		# return {"nodes": [], "links": []}
+	# """
+
+    gcins = get_level_gcin(gcin, level, False)
+
+    level1_df_buyer = transactions[(transactions.GCIN_1==gcin)]
+    level1_df_buyer['role']='Seller'
+    level1_df_buyer['counterparty']=level1_df_buyer.GCIN_2
+    buyer = level1_df_buyer[['counterparty','role']]
+    level1_df_seller = transactions[(transactions.GCIN_2==gcin)]
+    level1_df_seller['role2']='Buyer'
+    level1_df_seller['counterparty']=level1_df_seller.GCIN_1
+    seller = level1_df_seller[['counterparty','role2']]
+
+    result = pd.merge(buyer, seller,how='outer', on ='counterparty')
+    result['relationship']=result['role'].fillna('') +result['role2'].fillna('')
+    print "merge result"
+    print result
+
+	# if level == 2:
+		# level2_df_buyer = transactions.loc[transactions["GCIN_1"].isin(gcins)]
+		# level2_df_buyer['role']='Second order - S'
+		# level2_df_buyer['counterparty']=level2_df_buyer.GCIN_2
+		# level2_df_seller = transactions.loc[transactions["GCIN_2"].isin(gcins)]
+		# level2_df_seller['role2']='Second order - B'
+		# level2_df_seller['counterparty']=level2_df_seller.GCIN_1
+
+		# result = pd.concat([level1_df_buyer, level1_df_seller, level2_df_buyer, level2_df_seller])
+		# result['relationship']=result['role'].fillna('')+ result['role2'].fillna('')
+
+    #print level2_df_buyer
+    #print level2_df_seller
+
+
+    nodes = companies.loc[gcins]
+
+    nodes = pd.merge(nodes, result[['counterparty', 'relationship']], how='left', left_on='GCIN', right_on='counterparty')
+    nodes = nodes.drop(columns=['counterparty']).set_index('gcin')
+
+    print "printing nodes"
+    print nodes
+
+# same gpin relation
+    nodes["same_gpin"] = False
+    sameGpin_gcins = get_level_gcin(gcin, 1, True)
+    nodes.loc[list(sameGpin_gcins), "same_gpin"] = True
+    nodes.loc[list(sameGpin_gcins), "relationship"] = 'EG'
+#    nodes.loc[gcin, "relationship"] = 'EG'
+# nodes.sort_values(by="score", inplace=True, ascending=True)
+
+    nodes = process_nodes(nodes)
+    print "nodes 1 done"
+    links = process_links(nodes, gcins)
+    print "links done"
+    nodes = get_nodes_influence(nodes, links)
+    print "nodes 2 done"
+
+    #todo temporary remove null relationship
+    nodes['relationship'].fillna('EG',  inplace=True)
+
+    return {
+        "nodes": nodes.to_dict(orient="records"),
+        "links": links.to_dict(orient="records")
+    }
+    print "done-get company graph"
