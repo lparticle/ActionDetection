@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html>
+    <head lang="en">
+        <meta charset="utf-8">
+        <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.1.0/css/bootstrap.min.css">
+        <!-- Include Bootstrap Multiselect CSS, JS -->
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-multiselect/0.9.13/css/bootstrap-multiselect.css" />
+        <link rel="stylesheet" href="http://code.jquery.com/ui/1.12.1/themes/base/jquery-ui.css" />
+        <link href="static/index.css" rel="stylesheet">
+        <link href="static/w3.css" rel="stylesheet">
+
+    <style type="text/css">
+        .multiselect-container {
+            width: 200% !important;
+        }
+    </style>
+
+		<style>
+		   .ml-auto {
+			  left: auto !important;
+			  right: 0px;
+			}
+		</style>
+        <title>CNA Visualization </title>
+    </head>
+
+
+    <body>
+
+      <div id="id01" class="w3-modal" >
+         <div class="w3-modal-content">
+           <div class="w3-container">
+             <span onclick="document.getElementById('id01').style.display='none'" class="w3-button w3-display-bottomright">&times;</span>
+             <!-- <h5 style="display: none;" id="bs-table-header">Transaction Summary</h5> -->
+             <h2 class="text-center" id="bs-table-header">Buyer-Seller Summary (Jan 2017 - Now)</h2>
+             <div id="bs-table">
+             </div>
+             </div>
+           </div>
+      </div>
+
+	<nav class="navbar navbar-expand-sm bg-dark navbar-dark fixed-top">
+		<a class="navbar-brand" rel="home" href="#" title="DBS CNA">
+			<img style="max-width:80px; margin-top: -7px;"
+				 src="static/img/logo-white.png">
+		</a>
+
+		<div class="collapse navbar-collapse" id="collapsibleNavbar">
+			<ul class="navbar-nav">
+				<li class="nav-item">
+					<h8>
+					<a class="nav-link">CUSTOMER NETWORK ANALYSIS</a>
+					</h8>
+				 </li>
+			</ul>
+		</div>
+		<ul class="navbar-nav ml-auto" style="margin-left:23px;">
+			<li class="nav-item filter-item">
+				<h8>
+					<label class="control-label"> Country:  </label>
+					<select id="bookingcountry" multiple="multiple">
+						<option value="SINGAPORE">Singapore</option>
+						<option value="MALAYSIA">Malaysia</option>
+						<option value="CHINA">China</option>
+						<option value="HONG KONG">Hong Kong</option>
+						<option value="INDIA">India</option>
+						<option value="INDONESIA">Indonesia</option>
+						<option value="UNITED KINGDOM">United Kingdom</option>
+						<option value="UNITED ARAB EMIRATES">United Arab Emirates</option>
+						<option value="TAIWAN">Taiwan</option>
+						<option value="JAPAN">Japan</option>
+						<option value="AUSTRALIA">Australia</option>
+						<option value="VIETNAM">Vietnam</option>
+						<option value="SOUTH KOREA">South Korea</option>
+						<option value="unknown">Unknown</option>
+					</select>
+				</h8>
+			</li>
+
+      <!-- todo decide if to delete this filter since sub segment has segment. hide it for now-->
+			<li class="nav-item filter-item" style="margin-left:23px;display: none;">
+				<h8>
+					<label class="control-label"> Segment:  </label>
+					<select id="segment" multiple="multiple">
+						<option value="IBG1">IBG1</option>
+						<option value="IBG2">IBG2</option>
+						<option value="IBG3">IBG3</option>
+						<option value="IBG4">IBG4</option>
+						<option value="unknown">Unknown</option>
+					</select>
+				</h8>
+			</li>
+
+			<li class="nav-item filter-item" style="margin-left:23px;">
+				<h8>
+					<label class="control-label">  Sub Segment:  </label>
+					<select id="ServiceSegment" multiple="multiple">
+            <optgroup label="IBG1">
+            <option value="IBG1-BANGALORE">IBG1-BANGALORE</option>
+            <option value="IBG1-BEIJING">IBG1-BEIJING</option>
+            <option value="IBG1-CHINESE ENTERPRISES 2">IBG1-CE2</option>
+            <option value="IBG1-CHINESE ENTERPRISES 3">IBG1-CE3</option>
+            <option value="IBG1-CHINESE ENTERPRISES 4">IBG1-CE4</option>
+            <option value="IBG1-COMMODITIES">IBG1-COM</option>
+            <option value="IBG1-ENERGY, CHEMICAL & INFRASTRUCTURE">IBG1-ECI</option>
+            <option value="IBG1-FIG CHINA">IBG1-FIG CHINA</option>
+            <option value="IBG1-FIG HONG KONG">IBG1-FIG HK</option>
+            <option value="IBG1-FIG INDIA">IBG1-FIG INDIA</option>
+            <option value="IBG1-FIG KOREA">IBG1-FIG KOREA</option>
+            <option value="IBG1-FIG SINGAPORE">IBG1-FIG  </option>
+            <option value="IBG1-GENERAL INDUSTRIES-LABUAN">IBG1 - GI  LBU</option>
+            <option value="IBG1-GENERAL INDUSTRIES-LONDON">IBG1 - GI  LDN</option>
+            <option value="IBG1-GENERAL INDUSTRIES-LOS ANGELES">IBG1-GI LA</option>
+            <option value="IBG1-GENERAL INDUSTRIES-SEOUL">IBG1-GI SEL</option>
+            <option value="IBG1-GENERAL INDUSTRIES-VIETNAM">IBG1-GI VN</option>
+            <option value="IBG1-GOVERNMENT LINKED CORPNS">IBG1-GLC</option>
+            <option value="IBG1-HANGZHOU">IBG1-HANGZHOU</option>
+            <option value="IBG1-HK CONGLOMERATES">IBG1-HK CONGLOMERATES</option>
+            <option value="IBG1-HK TELECOMS, MEDIA & TECHNOLOGY">IBG1-HK TMT</option>
+            <option value="IBG1-JAKARTA">IBG1-JAKARTA</option>
+            <option value="IBG1-MUMBAI">IBG1-MUMBAI</option>
+            <option value="IBG1-NEW DELHI">IBG1-NEW DELHI</option>
+            <option value="IBG1-OTHERS">IBG1-OTHERS</option>
+            <option value="IBG1-RE">IBG1-RE</option>
+            <option value="IBG1-SCTF LONDON">IBG1-SCTF LONDON</option>
+            <option value="IBG1-SHANGHAI">IBG1-SHANGHAI</option>
+            <option value="IBG1-SHENZHEN">IBG1-SHENZHEN</option>
+            <option value="IBG1-SHIPPING, AVIATION & TPT">IBG1-SAT</option>
+            <option value="IBG1-SUZHOU">IBG1-SUZHOU</option>
+            <option value="IBG1-TAIPEI GENERAL INDUSTRY">IBG1-GI TPE</option>
+            <option value="IBG1-TELECOMMUNICATIONS, MEDIA & TECHNOLOGY">IBG1-TMT</option>
+            <option value="IBG1-TIANJIN">IBG1-TIANJIN</option>
+            <option value="IBG1-WESTERN MNC">IBG1-WMNC</option>
+            </optgroup>
+            <optgroup label="IBG2">
+            <option value="IBG2-BANGALORE">IBG2-BANGALORE</option>
+            <option value="IBG2-BEIJING">IBG2-BEIJING</option>
+            <option value="IBG2-CHENNAI">IBG2-CHENNAI</option>
+            <option value="IBG2-CONGLOMERATES & ASIAN CORPORATES">IBG2-CAC</option>
+            <option value="IBG2-GENERAL INDUSTRIES">IBG2-GI</option>
+            <option value="IBG2-GUANGZHOU">IBG2-GUANGZHOU</option>
+            <option value="IBG2-JAKARTA">IBG2-JAKARTA</option>
+            <option value="IBG2-MID CAP2">IBG2-MID CAP2</option>
+            <option value="IBG2-MUMBAI">IBG2-MUMBAI</option>
+            <option value="IBG2-SHANGHAI">IBG2-SHANGHAI</option>
+            <option value="IBG2-TAIPEI">IBG2-TAIPEI</option>
+            </optgroup>
+            <optgroup label="IBG3">
+            <option value="IBG3-BEIJING">IBG3-BEIJING</option>
+            <option value="IBG3-CHENNAI">IBG3-CHENNAI</option>
+            <option value="IBG3-E1">IBG3-E1</option>
+            <option value="IBG3-E2">IBG3-E2</option>
+            <option value="IBG3-E3">IBG3-E3</option>
+            <option value="IBG3-E4">IBG3-E4</option>
+            <option value="IBG3-E5">IBG3-E5</option>
+            <option value="IBG3-E6">IBG3-E6</option>
+            <option value="IBG3-E7">IBG3-E7</option>
+            <option value="IBG3-E8">IBG3-E8</option>
+            <option value="IBG3-MUMBAI">IBG3-MUMBAI</option>
+            <option value="IBG3-OTHERS">IBG3-OTHERS</option>
+            <option value="IBG3-SHANGHAI">IBG3-SHANGHAI</option>
+            </optgroup>
+            <optgroup label="IBG4">
+            <option value="IBG4-EBC">IBG4-EBC</option>
+            <option value="IBG4-ETM">IBG4-ETM</option>
+            <option value="IBG4-JAKARTA">IBG4-JAKARTA</option>
+            <option value="IBG4-MUMBAI">IBG4-MUMBAI</option>
+            <option value="IBG4-NS1">IBG4-NS1</option>
+            <option value="IBG4-NS2">IBG4-NS2</option>
+            <option value="IBG4-OTHERS">IBG4-OTHERS</option>
+            <option value="IBG4-PM">IBG4-PM</option>
+            <option value="IBG4-PORTFOLIO SERVICE TEAM">IBG4-PST</option>
+            <option value="IBG4-PS">IBG4-PS</option>
+            <option value="IBG4-SD">IBG4-SD</option>
+            </optgroup>
+            <option value="UNKNOWN">UNKNOWN</option>
+					</select>
+				</h8>
+			</li>
+
+			<li class="nav-item filter-item" style="margin-left:23px;">
+			  <h8>
+				<label class="control-label"> RM:  </label>
+				<select id="RelationshipManager" multiple="multiple">
+				  <option value="JINALEE">JINALEE</option>
+				  <option value="JENNIFERONGHL">JENNIFERONGHL</option>
+				  <option value="MICHELLENG">MICHELLENG</option>
+				  <option value="JOSEPHPHANGY">JOSEPHPHANGY</option>
+				  <option value="JEREMYLOHKP">JEREMYLOHKP</option>
+				  <option value="JOELENEQUAH">JOELENEQUAH</option>
+				  <option value="BELINDATEOJY">BELINDATEOJY</option>
+				  <option value="EDVINNG">EDVINNG</option>
+				  <option value="JOANNEKOK">JOANNEKOK</option>
+				  <option value="CASEYHONG">CASEYHONG</option>
+				</select>
+			  </h8>
+			</li>
+
+			<li class="nav-item filter-item" style="margin-left:23px;">
+				<h8>
+					<label class="control-label"> Company:  </label>
+					<input type="text" id="company_name" class="ui-autocomplete-input" autocomplete="off" style="margin-left:0px;">
+				</h8>
+			</li>
+
+      <li class="nav-item filter-item" style="margin-left:23px;">
+				<button type="button"  class="btn btn-primary" id="do-filter"> Filter </button>
+			</li>
+
+		</ul>
+
+<!--
+		<ul class="navbar-nav " style="margin-left:33px;">
+			<li class="nav-item">
+				<button type="button"  class="btn btn-primary" id="do-filter"> Filter </button>
+			</li>
+		</ul>
+-->
+
+
+	</nav>
+
+
+	<div class="container-fluid" style="margin-top:80px">
+
+		<div class="row">
+			  <div class="col-sm-2 d-print-none">
+
+      <div class="input-group mb-3" id="filtered-table-header" style="display: none;" >
+        <input type="text" class="form-control" placeholder="Search" id="search">
+        <div class="input-group-append">
+          <button class="btn btn-primary" type="button" id="search-button">Go</button>
+        </div>
+      </div>
+
+				<!-- <h5 style="display: none;" id="filtered-table-header" > DBS Companies List</h5> -->
+				<div id="rank-table">
+				</div>
+        <div id="rank-table-non-dbs">
+        </div>
+			  </div>
+
+      <div class="col-md-6 clear-fix">
+      <p class="h3" id="company-gcin" style="font-size:150%;"><b></b></p>
+
+			<div  id="company-plot">
+
+				<nav class="navbar" >
+
+					<ul class="navbar-nav ml-auto">
+					<select class="dropdown-toggle" id="d3-dropdown" style="font-size:150%;display: none;">
+						<option value=1>First order</option>
+						<option value=2>Second order</option>
+						<option value=3>Third order</option>
+					</select>
+					</ul>
+				</nav>
+
+<!--        <div class="row text-center">
+				<div class="ui-widget">
+				   <input id="search">
+					<button type="button" id="search-button">Search</button>
+				</div>
+				</div> -->
+
+
+				<hr class="d-sm-none">
+
+			</div>
+      <!--
+      <h5 style="display: none;" id="bs-table-header">Transaction Summary</h5>
+      <div id="bs-table">
+      </div>
+      -->
+
+    </div>
+			<div class="col-md-4">
+				<h2 style="display: none;" id="summary-header" >Summary </h2>
+
+				<div style="display: none; border:1px solid black; margin-bottom:20px;margin-top:14px;" align="center" id = "summary-details">
+					<div class="row" style="margin-bottom:20px;margin-top:14px;">
+					  <div class="col-sm" id='summary-label-1'>$229B
+					  <br>
+					  </div>
+					  <div class="col-sm" id='summary-label-2'>$892.78B
+					  <br>
+					  </div>
+					  <div class="col-sm" id='summary-label-3'>Telecommunications</div>
+					</div>
+
+					<div class="row"  style="margin-bottom:20px;margin-top:14px;">
+					  <div class="col-sm" id='summary-label-4'>2 </div>
+					  <div class="col-sm" id='summary-label-5'>Green</div>
+					  <div class="col-sm" id='summary-label-6'>Robert Tan</div>
+					</div>
+				</div>
+
+				<h5 style="display: none;" id="internal-table-header"><b>Group Companies</b></h5>
+				<div id="internal-partener">
+				</div>
+				<h5 style="display: none;" id="external-table-header"><b>Counterparties</b></h5>
+				<div id="external-partener">
+				</div>
+
+
+
+			</div>
+
+		</div>
+
+
+
+	</div>
+
+	 <script src="https://code.jquery.com/jquery-3.1.1.min.js"></script>
+     <script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/js/bootstrap.min.js" ></script>
+
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.14.0/umd/popper.min.js"></script>
+  <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.1.0/js/bootstrap.min.js"></script>
+
+
+
+
+
+        <script src="http://code.jquery.com/ui/1.12.1/jquery-ui.min.js"></script>
+
+        <script src="https://d3js.org/d3.v3.min.js"></script>
+        <script src="http://labratrevenge.com/d3-tip/javascripts/d3.tip.v0.6.3.js"></script>
+        <script src="http://d3-legend-v3.susielu.com/d3-legend.min.js"></script>
+        <script src="static/bootstrap-multiselect.min.js"></script>
+        <script src="static/index.js"></script>
+
+    </body>
+</html>
