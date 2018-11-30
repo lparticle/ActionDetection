@@ -1,0 +1,140 @@
+/*div {
+    border-style: solid;
+    border-width: 2px;
+}*/
+
+/* body {
+  font-size: 10px;
+} */
+
+.table-fixed-long{
+
+    height:350px;
+    overflow-y:auto;
+    display:block;
+}
+
+.table-fixed-short{
+
+    height:200px;
+    overflow-y:auto;
+    display:block;
+}
+
+#company-gcin {
+  font-size: 11px;
+  font-family: Arial;
+}
+
+.filter-bar {
+  background: navy !important;
+}
+
+.control-label {
+  color: white;
+}
+
+.btn {
+  font-size: 10px;
+}
+
+.multiselect-container {
+  font-size: 10px;
+}
+
+.multiselect {
+  font-size: 10px;
+}
+
+.filter-bar {
+  margin: 10px;
+}
+
+
+#overall-plot {
+/*    border-style: solid;
+    border-width: 1px;*/
+}
+
+#company-plot {
+/*    border-style: solid;
+    border-width: 1px;*/
+}
+
+
+svg {
+  width: 100%;
+  height: 100%;
+  font-size: 10px;
+}
+
+.link {
+  fill: none;
+  stroke: #666;
+}
+
+
+.link.minor {
+  stroke: purple;
+}
+
+.link.major {
+  /*stroke-dasharray: 0,2 1;*/
+  stroke: red;
+}
+
+.DBS {
+  /*stroke-dasharray: 0,2 1;*/
+  background-color: #f8d7da;
+}
+
+.Prospect{
+	background-color: #CCFFCC;
+}
+
+.NonDBS{
+	background-color: rgb(204, 204, 204);
+}
+
+circle {
+  /*stroke: #333;*/
+  stroke-width: 1.5px;
+}
+
+text {
+  font: 6px sans-serif;
+  pointer-events: none;
+  text-shadow: 0 1px 0 #fff, 1px 0 0 #fff, 0 -1px 0 #fff, -1px 0 0 #fff;
+}
+
+/* d3 tip*/
+
+.d3-tip {
+  line-height: 1;
+  font-weight: bold;
+  padding: 12px;
+  background: rgba(0, 0, 0, 0.6);
+  color: #fff;
+  border-radius: 2px;
+  pointer-events: none;
+}
+
+/* Creates a small triangle extender for the tooltip */
+.d3-tip:after {
+  box-sizing: border-box;
+  display: inline;
+  font-size: 7px;
+  width: 100%;
+  line-height: 1;
+  color: rgba(0, 0, 0, 0.8);
+  content: "\25BC";
+  position: absolute;
+  text-align: center;
+}
+
+/* Style northward tooltips differently */
+.d3-tip.n:after {
+  margin: -1px 0 0 0;
+  top: 100%;
+  left: 0;
+}
